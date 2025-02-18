@@ -3,62 +3,68 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+// use App\Http\Requests\LoginRequest;
+use App\Http\Requests\LoginRequest;
+use App\Http\Requests\StoreUserRequest;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class Usercontroller extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function index()
+
+    public function register(StoreUserRequest  $request)
     {
-        
+
+        $userExist = User::where("email", $request->email)->first();
+
+        if ($userExist) {
+            return response()->json([
+                'message' => 'El correo electrónico ya está registrado.',
+                'validation' => false
+            ], 422);
+        }
+
+        User::create(
+            [
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+            ]
+        );
+
+        return response()->json(["message" => "Usuario registrado", "validation" => true]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
-    public function store(Request $request)
+    public function login(LoginRequest $request)
     {
-         
+
+        $userExist =  User::where("email", $request->email)->first();
+
+        if (!$userExist || !Hash::check($request->password, $userExist->password)) {
+            throw ValidationException::withMessages([
+                'message' => ['Información incorrecta'],
+            ], 422);
+        }
+
+
+        $token = $userExist->createToken('auth_token')->plainTextToken;
+        return response()->json(['access_token' => $token, "validation" => true]);
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function show($id)
+    public function logout(Request $request)
     {
-        //
-    }
+        $user = Auth::user();
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function update(Request $request, $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function destroy($id)
-    {
-        //
+        if (!$user) {
+            return response()->json([
+                'message' => 'El usuario no está autenticado o el email no coincide.',
+                'validation' => false
+            ], 401);
+        }
+        $request->user()->currentAccessToken()->delete();
+        return response()->json(['message' => 'Sesión cerrada correctamente']);
     }
 }
